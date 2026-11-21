@@ -40,7 +40,7 @@ class DrawLifeForegroundService : Service() {
             ServiceCompat.startForeground(
                 this,
                 ToolbarNotification.NOTIFICATION_ID,
-                ToolbarNotification.create(this),
+                ToolbarNotification.create(this, forForegroundService = true),
                 serviceType
             )
             isRunning.set(true)
@@ -75,6 +75,7 @@ class DrawLifeForegroundService : Service() {
     companion object {
         private const val EXTRA_START_SOURCE = "foreground_start_source"
         private val isRunning = AtomicBoolean(false)
+        val isActive: Boolean get() = isRunning.get()
 
         fun start(context: Context, source: String, refreshNotification: Boolean = false) {
             if (isRunning.get() && !refreshNotification) {

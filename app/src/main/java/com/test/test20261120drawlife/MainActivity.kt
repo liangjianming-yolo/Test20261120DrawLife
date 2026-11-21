@@ -45,6 +45,7 @@ import com.test.test20261120drawlife.background.DailyAlarmPlan
 import com.test.test20261120drawlife.background.DrawLifeForegroundService
 import com.test.test20261120drawlife.background.ReminderNotification
 import com.test.test20261120drawlife.background.ToolbarNotification
+import com.test.test20261120drawlife.fcm.FcmTestPanel
 import com.test.test20261120drawlife.ui.theme.Test20261120DrawLifeTheme
 import java.time.Instant
 import java.time.ZonedDateTime
@@ -259,6 +260,8 @@ private fun ForegroundTestScreen(
                 Text(stringResource(R.string.alarm_cancel))
             }
         }
+
+        FcmTestPanel()
     }
 }
 

@@ -8,6 +8,7 @@ import com.test.test20261120drawlife.background.AlarmReminderScheduler
 import com.test.test20261120drawlife.background.BackgroundTaskScheduler
 import com.test.test20261120drawlife.background.DrawLifeForegroundService
 import com.test.test20261120drawlife.background.ForegroundServiceReceiver
+import com.test.test20261120drawlife.fcm.FcmNotification
 
 class DrawLifeApplication : Application(), Configuration.Provider {
     override val workManagerConfiguration: Configuration
@@ -19,6 +20,7 @@ class DrawLifeApplication : Application(), Configuration.Provider {
     override fun onCreate() {
         super.onCreate()
         Log.i(BackgroundTaskScheduler.LOG_TAG, "Application.onCreate pid=${Process.myPid()}")
+        FcmNotification.createChannel(this)
         ForegroundServiceReceiver.registerForProcess(this)
         AlarmReminderScheduler.restore(this, source = "application")
         DrawLifeForegroundService.start(this, source = "application")

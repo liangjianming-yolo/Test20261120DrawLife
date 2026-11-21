@@ -25,4 +25,13 @@
     <string name="alarm_cancel">取消每日提醒</string>
     <string name="alarm_notifications_disabled">测试提醒通知已关闭，到点后无法在通知栏展示。</string>
     <string name="alarm_settings_unavailable">无法打开闹钟权限页面，请在系统应用设置中开启。</string>
+    <string name="fcm_channel_id" translatable="false">draw_life_fcm</string>
+    <string name="fcm_channel_name">FCM 推送</string>
+    <string name="fcm_title">FCM 推送测试</string>
+    <string name="fcm_not_configured">尚未配置 Firebase，暂时无法接收远程推送。</string>
+    <string name="fcm_copy_token">复制 FCM 测试 Token</string>
+    <string name="fcm_token_copied">已复制 FCM 测试 Token</string>
+    <string name="fcm_token_failed">获取 FCM Token 失败，请检查网络后重试。</string>
+    <string name="fcm_foreground_probe_title">FCM 前台服务测试</string>
+    <string name="fcm_foreground_probe_body">测试设备已收到一条 FCM 数据消息。</string>
 </resources>

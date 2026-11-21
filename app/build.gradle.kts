@@ -3,6 +3,11 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
+// 未配置 Firebase 时，仍然可以构建并测试本地功能。
+if (file("google-services.json").isFile) {
+    pluginManager.apply("com.google.gms.google-services")
+}
+
 android {
     namespace = "com.test.test20261120drawlife"
     compileSdk {
@@ -36,6 +41,13 @@ android {
 }
 
 dependencies {
+    implementation(platform(libs.firebase.bom))
+    implementation(libs.firebase.messaging)
+    constraints {
+        implementation(libs.androidx.fragment) {
+            because("Play services brings in Fragment 1.1.0, which predates the Activity Result permission API")
+        }
+    }
     implementation(libs.androidx.work.runtime)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)

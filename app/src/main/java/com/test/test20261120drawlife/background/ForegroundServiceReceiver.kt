@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.net.wifi.WifiManager
+import android.os.Build
 import android.util.Log
 import androidx.core.content.ContextCompat
 
@@ -20,6 +21,15 @@ class ForegroundServiceReceiver : BroadcastReceiver() {
         }
 
         Log.i(BackgroundTaskScheduler.LOG_TAG, "Foreground trigger received: $action")
+        if (action == Intent.ACTION_BOOT_COMPLETED &&
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM
+        ) {
+            // Android 15 起禁止在开机广播中启动 dataSync 前台服务。
+            if (!DrawLifeForegroundService.isActive) {
+                ToolbarNotification.restoreAfterBoot(context)
+            }
+            return
+        }
         // 复用运行状态检查和异常处理。收到广播不代表系统允许启动前台服务。
         DrawLifeForegroundService.start(context, source = "broadcast:$action")
     }

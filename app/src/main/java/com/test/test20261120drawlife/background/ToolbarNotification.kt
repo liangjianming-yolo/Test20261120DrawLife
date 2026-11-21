@@ -1,15 +1,19 @@
 package com.test.test20261120drawlife.background
 
+import android.Manifest
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Build
+import android.util.Log
 import android.widget.RemoteViews
 import androidx.annotation.LayoutRes
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 import com.test.test20261120drawlife.MainActivity
 import com.test.test20261120drawlife.R
 
@@ -21,7 +25,29 @@ object ToolbarNotification {
     const val ENTRY_INFO = "info"
     const val ENTRY_SETTINGS = "settings"
 
-    fun create(context: Context): Notification {
+    fun restoreAfterBoot(context: Context) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            return
+        }
+        val manager = requireNotNull(context.getSystemService(NotificationManager::class.java))
+        if (!manager.areNotificationsEnabled() ||
+            manager.getNotificationChannel(CHANNEL_ID)?.importance == NotificationManager.IMPORTANCE_NONE
+        ) {
+            return
+        }
+        try {
+            // 与前台服务使用同一通知 ID，打开应用后更新原来的卡片。
+            manager.notify(NOTIFICATION_ID, create(context, forForegroundService = false))
+            Log.i(BackgroundTaskScheduler.LOG_TAG, "Toolbar notification restored after boot")
+        } catch (exception: SecurityException) {
+            Log.w(BackgroundTaskScheduler.LOG_TAG, "Toolbar notification permission rejected", exception)
+        }
+    }
+
+    fun create(context: Context, forForegroundService: Boolean): Notification {
         val manager = requireNotNull(context.getSystemService(NotificationManager::class.java))
         if (manager.getNotificationChannel(CHANNEL_ID) == null) {
             val channel = NotificationChannel(
@@ -52,7 +78,11 @@ object ToolbarNotification {
             .setOngoing(true)
             .setAutoCancel(false)
             .setOnlyAlertOnce(true)
-            .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
+            .apply {
+                if (forForegroundService) {
+                    setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
+                }
+            }
             .build()
     }
 
