@@ -1,4 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="drawlife_toolkit_toolbar_text">#2E3356</color>
+    <color name="demo_toolbar_text">#2E3356</color>
 </resources>

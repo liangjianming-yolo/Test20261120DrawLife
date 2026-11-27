@@ -1,4 +1,4 @@
-package com.drawlife.backgroundtoolkit.background
+package com.drawlife.backgroundtoolkit.background.work
 
 import android.content.Context
 import android.os.Process

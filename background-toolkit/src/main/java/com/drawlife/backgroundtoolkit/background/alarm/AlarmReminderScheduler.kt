@@ -1,4 +1,4 @@
-package com.drawlife.backgroundtoolkit.background
+package com.drawlife.backgroundtoolkit.background.alarm
 
 import android.app.AlarmManager
 import android.app.PendingIntent
@@ -8,6 +8,7 @@ import android.content.SharedPreferences
 import android.net.Uri
 import android.os.Build
 import android.util.Log
+import com.drawlife.backgroundtoolkit.background.work.BackgroundTaskScheduler
 import java.time.Instant
 import java.time.LocalTime
 import java.time.ZoneId

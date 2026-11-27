@@ -22,11 +22,11 @@
         </receiver>
 
         <receiver
-            android:name=".background.AlarmReminderReceiver"
+            android:name=".background.alarm.AlarmReminderReceiver"
             android:exported="false" />
 
         <receiver
-            android:name=".background.AlarmRestoreReceiver"
+            android:name=".background.alarm.AlarmRestoreReceiver"
             android:exported="false">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
@@ -43,7 +43,7 @@
             android:foregroundServiceType="dataSync" />
 
         <service
-            android:name=".background.DrawLifeJobService"
+            android:name=".background.work.DrawLifeJobService"
             android:exported="true"
             android:permission="android.permission.BIND_JOB_SERVICE" />
     </application>

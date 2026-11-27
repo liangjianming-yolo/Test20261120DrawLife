@@ -1,5 +1,7 @@
 <resources>
     <string name="app_name">Test20261120DrawLife</string>
+    <!-- 正式版可填写自己的 HTTPS 心跳接口。留空时只在本地记录。 -->
+    <string name="heartbeat_upload_url" translatable="false"></string>
     <string name="notification_title">前台服务测试</string>
     <string name="notification_channel_name">测试工具栏</string>
     <string name="toolbar_tracker">Tracker</string>

@@ -1,4 +1,4 @@
-package com.drawlife.backgroundtoolkit.background
+package com.drawlife.backgroundtoolkit.background.work
 
 import android.app.job.JobParameters
 import android.app.job.JobService

@@ -29,7 +29,22 @@ python3 tools/send_fcm_test.py data --priority normal
 python3 tools/send_fcm_test.py data --priority high
 ```
 
-日志中 `received=normal` 或 `unknown` 会进入普通提醒检查。安装满 5 分钟、距上次普通提醒至少 43 分钟且当日未满 3 条时，可以收到「每日提醒」。`received=high` 会尝试发布一条本地提醒，并请求工具栏服务，日志中的启动来源为 `fcm_high_priority`。若服务本来就在运行，日志会记录 `already active`。用 `adb -s emulator-5554 shell dumpsys activity services com.test.test20261120drawlife` 查看服务状态。进入真实回调就会分流，无需特定的 `test_value`。本地模拟广播只验证本地接收入口。
+这些展示和频控规则由示例 App 的 `DemoFcmMessageHandler` 实现。日志中 `received=normal` 或 `unknown` 会进入普通提醒检查。安装满 5 分钟、距上次普通提醒至少 43 分钟且当日未满 3 条时，可以收到「每日提醒」。`received=high` 会尝试发布一条本地提醒，并请求工具栏服务。服务日志在 `DrawLife_Log` 标签下，启动来源为 `fcm_high_priority`，已运行时会记录 `already active`。用 `adb -s emulator-5554 shell dumpsys activity services com.test.test20261120drawlife` 查看服务状态。
+
+## 本地接收 Timer 心跳
+
+在 Mac 上运行接收器并保留终端，在另一个终端给目标设备设置端口转发，然后打开含本次改动的 Debug 版。
+
+```sh
+python3 tools/receive_heartbeat.py
+```
+
+```sh
+adb -s emulator-5554 reverse tcp:8765 tcp:8765
+adb -s emulator-5554 logcat -s DrawLifeHeartbeat
+```
+
+Debug 版启动时立即检查，此后每分钟检查一次。首次生成的事件会打印 `ALIVE recorded`，通常在 2 分钟后再产生一条。接收器打印 `received` 和实际新增的 `new`，App 收到 HTTP 2xx 后打印 `ALIVE uploaded`。在两条心跳之间结束进程并重新打开，未到期时应看到 `check generated=false`。停止接收器后生成的心跳会留在手机，重新启动接收器后，下一条心跳到期时可以一起收到。测试接收器按安装标识和事件 ID 持久化去重。
 
 ## 本地模拟纯数据冷启动
 

@@ -2,6 +2,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <uses-permission android:name="android.permission.INTERNET" />
+
     <application
         android:name=".DrawLifeApplication"
         android:allowBackup="true"
@@ -22,10 +24,10 @@
 
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_icon"
-            android:resource="@drawable/drawlife_toolkit_ic_notification" />
+            android:resource="@drawable/demo_ic_notification" />
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_channel_id"
-            android:value="@string/drawlife_toolkit_fcm_channel_id" />
+            android:value="@string/demo_fcm_channel_id" />
 
         <!-- 使用 Application 提供的 WorkManager 配置，保留 100 号 Job 的编号。 -->
         <provider

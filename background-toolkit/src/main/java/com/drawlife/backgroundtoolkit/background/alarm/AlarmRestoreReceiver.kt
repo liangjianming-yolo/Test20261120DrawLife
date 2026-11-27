@@ -1,4 +1,4 @@
-package com.drawlife.backgroundtoolkit.background
+package com.drawlife.backgroundtoolkit.background.alarm
 
 import android.app.AlarmManager
 import android.content.BroadcastReceiver
@@ -9,7 +9,7 @@ import com.drawlife.backgroundtoolkit.BackgroundToolkit
 /** 接收影响闹钟的系统广播，按已保存的计划重新安排每日提醒。 */
 class AlarmRestoreReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        if (BackgroundToolkit.configuration?.enableDailyReminder != true) return
+        if (BackgroundToolkit.configuration?.dailyReminderNotification == null) return
         val action = intent.action ?: return
         when (action) {
             Intent.ACTION_BOOT_COMPLETED,

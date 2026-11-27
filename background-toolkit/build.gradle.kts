@@ -1,5 +1,6 @@
 plugins {
     id("com.android.library")
+    id("com.google.devtools.ksp") version "2.3.12"
 }
 
 android {
@@ -20,6 +21,9 @@ android {
 }
 
 dependencies {
+    val roomVersion = "2.8.4"
+    implementation("androidx.room:room-runtime:$roomVersion")
+    ksp("androidx.room:room-compiler:$roomVersion")
     implementation("androidx.core:core-ktx:1.19.1")
     api("androidx.work:work-runtime:2.12.0")
     api(platform("com.google.firebase:firebase-bom:35.2.0"))

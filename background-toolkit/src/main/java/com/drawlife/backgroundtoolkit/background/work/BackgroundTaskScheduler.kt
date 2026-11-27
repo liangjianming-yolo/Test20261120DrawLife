@@ -1,4 +1,4 @@
-package com.drawlife.backgroundtoolkit.background
+package com.drawlife.backgroundtoolkit.background.work
 
 import android.app.job.JobInfo
 import android.app.job.JobScheduler
@@ -17,6 +17,7 @@ import java.util.concurrent.TimeUnit
 internal object BackgroundTaskScheduler {
     const val LOG_TAG = "DrawLife_Log"
     private const val JOB_DELAY_MILLIS = 30_000L
+    private const val LEGACY_TOOLKIT_JOB_SERVICE = "com.drawlife.backgroundtoolkit.background.DrawLifeJobService"
 
     /** 初始化时保留同一服务的待执行 Job。Job 回调传入 false，用相同 ID 安排下一轮。 */
     fun scheduleJob(context: Context, keepExisting: Boolean = true) {
@@ -25,20 +26,20 @@ internal object BackgroundTaskScheduler {
         try {
             val scheduler = requireNotNull(context.getSystemService(JobScheduler::class.java))
             val service = ComponentName(context, DrawLifeJobService::class.java)
-            val pendingJob = scheduler.getPendingJob(jobId)
+            val pendingService = scheduler.getPendingJob(jobId)?.service
 
-            // 后台 Job 唤起新进程时，保留系统准备交付的任务。迁移旧组件时改用库的服务。
-            if (keepExisting && pendingJob?.service == service) {
+            if (keepExisting && pendingService == service) {
                 Log.i(LOG_TAG, "Job $jobId already scheduled; keeping existing job")
                 return
             }
-            // 只有配置中指明的旧服务可以迁移，避免覆盖宿主占用相同 ID 的其他 Job。
-            if (pendingJob != null && pendingJob.service != service &&
-                (pendingJob.service.packageName != context.packageName ||
-                    pendingJob.service.className != config.legacyJobServiceName)
-            ) {
-                Log.e(LOG_TAG, "Job $jobId is already used by ${pendingJob.service}; choose another ID")
-                return
+            if (pendingService != null && pendingService != service) {
+                val isLegacyService = pendingService.packageName == context.packageName &&
+                    (pendingService.className == LEGACY_TOOLKIT_JOB_SERVICE ||
+                        pendingService.className == config.legacyJobServiceName)
+                if (!isLegacyService) {
+                    Log.e(LOG_TAG, "Job $jobId is already used by $pendingService; choose another ID")
+                    return
+                }
             }
 
             val job = JobInfo.Builder(jobId, service)

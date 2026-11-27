@@ -9,11 +9,14 @@ import android.os.Build
 import android.util.Log
 import androidx.core.content.ContextCompat
 import com.drawlife.backgroundtoolkit.BackgroundToolkit
+import com.drawlife.backgroundtoolkit.background.work.BackgroundTaskScheduler
 
-/** 工具栏功能开启时，收到支持的系统广播后尝试启动尚未运行的前台服务。 */
+/** 前台服务功能开启时，收到支持的系统广播后尝试启动服务。 */
 class ForegroundServiceReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        if (BackgroundToolkit.configuration?.enableForegroundToolbar != true) return
+        if (BackgroundToolkit.configuration?.foregroundNotification == null) return
+        // 动态注册时，系统可能重放上次的 Wi-Fi 状态。只让之后发生的事件触发服务。
+        if (isInitialStickyBroadcast) return
         val action = intent.action ?: return
         // 应用安装、替换和移除广播应携带 package: URI，存储介质广播应携带 file: URI。
         when (action) {

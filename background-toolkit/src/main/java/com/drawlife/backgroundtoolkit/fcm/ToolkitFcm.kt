@@ -1,18 +1,15 @@
 package com.drawlife.backgroundtoolkit.fcm
 
 import android.content.Context
-import android.content.pm.ApplicationInfo
 import android.util.Log
 import com.drawlife.backgroundtoolkit.BackgroundToolkit
-import com.drawlife.backgroundtoolkit.R
-import com.drawlife.backgroundtoolkit.background.BackgroundTaskScheduler
 import com.drawlife.backgroundtoolkit.background.DrawLifeForegroundService
+import com.drawlife.backgroundtoolkit.background.work.BackgroundTaskScheduler
 import com.google.android.gms.tasks.Task
 import com.google.android.gms.tasks.Tasks
 import com.google.firebase.FirebaseApp
 import com.google.firebase.messaging.FirebaseMessaging
 import com.google.firebase.messaging.RemoteMessage
-import org.json.JSONException
 import org.json.JSONObject
 import java.io.File
 import java.io.IOException
@@ -44,9 +41,10 @@ object ToolkitFcm {
         }
     }
 
+    /** 宿主可直接从 FirebaseMessagingService.onNewToken 转交刷新的 Token。 */
     @Synchronized
     fun onNewToken(context: Context, token: String) {
-        if (BackgroundToolkit.configuration?.enableFcmNotifications != true || !isConfigured(context)) return
+        if (token.isBlank() || !isConfigured(context)) return
         tokenGeneration++
         saveToken(context, token)
     }
@@ -71,115 +69,27 @@ object ToolkitFcm {
                 temp.delete()
             }
             Log.i(BackgroundTaskScheduler.LOG_TAG, "FCM registration token saved")
-            printToken(context)
         } catch (error: IOException) {
             Log.w(BackgroundTaskScheduler.LOG_TAG, "Unable to save FCM registration token", error)
         }
     }
 
-    fun printToken(context: Context) {
-        if (!isDebuggable(context)) return
-        val file = File(context.noBackupFilesDir, TOKEN_FILE)
-        if (!file.isFile) {
-            Log.i(BackgroundTaskScheduler.LOG_TAG, "FCM token not cached yet")
-            return
-        }
-        try {
-            val token = JSONObject(file.readText()).getString("token")
-            Log.i(BackgroundTaskScheduler.LOG_TAG, "FCM token $token")
-        } catch (error: IOException) {
-            Log.w(BackgroundTaskScheduler.LOG_TAG, "Unable to read cached FCM token", error)
-        } catch (_: JSONException) {
-            Log.w(BackgroundTaskScheduler.LOG_TAG, "Invalid FCM token cache")
-        }
-    }
-
-    /** Call from the host's FirebaseMessagingService when it owns the FCM manifest entry. */
+    /** 宿主自有 FirebaseMessagingService 可调用此方法，将消息交给已配置的处理器。 */
     fun onMessageReceived(context: Context, message: RemoteMessage) {
-        val config = BackgroundToolkit.configuration ?: return
-        if (!config.enableFcmNotifications) return
-
-        // SDK 先取 delivered_priority，缺失时检查 priority_reduced，再回退到 google.priority。
-        val deliveredPriority = message.priority
-        Log.i(
-            BackgroundTaskScheduler.LOG_TAG,
-            "FCM priority: requested=${priorityName(message.originalPriority)}, " +
-                "received=${priorityName(deliveredPriority)}"
-        )
-        logMessage(message, source = "fcm")
-
-        if (config.enableFcmPriorityHandling) {
-            if (deliveredPriority == RemoteMessage.PRIORITY_HIGH) {
-                DrawLifeForegroundService.start(context, source = "fcm_high_priority")
-                FcmReminderPolicy.showHigh(context, config.launchActivity, message.messageId)
-            } else {
-                FcmReminderPolicy.checkNormal(context, config.launchActivity, message.messageId)
-            }
-            return
-        }
-
-        val notification = message.notification
-        if (notification != null) {
-            FcmNotification.show(
-                context, config.launchActivity, message.messageId, notification.title, notification.body
-            )
-        } else if (config.enableForegroundToolbar && config.enableFcmForegroundServiceProbe &&
-            isDebuggable(context) && message.data["test_value"] == "fgs-high-priority-test"
-        ) {
-            runForegroundServiceProbe(context, message, config)
-        }
+        val handler = BackgroundToolkit.configuration?.fcmMessageHandler ?: return
+        handler.onMessageReceived(context, message, message.deliveryPriority())
     }
 
-    /** Records a local test message in a debuggable host without invoking a real FCM callback. */
-    fun simulateDataMessage(context: Context, testValue: String) {
-        if (!isDebuggable(context) || BackgroundToolkit.configuration?.enableFcmNotifications != true) return
-
-        val message = RemoteMessage.Builder("drawlife-local-test").addData("test_value", testValue).build()
-        logMessage(message, source = "local")
+    /** 宿主在真实 FCM 回调内显式调用。实际投递为高优先级时才尝试启动工具栏服务。 */
+    fun requestForegroundToolbar(context: Context, message: RemoteMessage) {
+        if (message.deliveryPriority() != FcmDeliveryPriority.HIGH) return
+        // start() 会检查前台通知是否已配置。宿主可以使用自己的 FCM 消息服务。
+        DrawLifeForegroundService.start(context, source = "fcm_high_priority")
     }
 
-    internal fun createChannel(context: Context) = FcmNotification.createChannel(context)
-
-    private fun runForegroundServiceProbe(
-        context: Context,
-        message: RemoteMessage,
-        config: BackgroundToolkit.Config
-    ) {
-        when (message.priority) {
-            RemoteMessage.PRIORITY_HIGH ->
-                DrawLifeForegroundService.start(context, source = "fcm_high_priority_test")
-            RemoteMessage.PRIORITY_NORMAL -> Log.i(
-                BackgroundTaskScheduler.LOG_TAG,
-                "FCM foreground service probe skipped: received=normal"
-            )
-            else -> Log.w(
-                BackgroundTaskScheduler.LOG_TAG,
-                "FCM foreground service probe skipped: unknown delivery priority (${message.priority})"
-            )
-        }
-        FcmNotification.show(
-            context,
-            config.launchActivity,
-            message.messageId,
-            context.getString(R.string.drawlife_toolkit_fcm_foreground_probe_title),
-            context.getString(R.string.drawlife_toolkit_fcm_foreground_probe_body)
-        )
-    }
-
-    private fun logMessage(message: RemoteMessage, source: String) {
-        val kind = if (message.notification == null) "data" else "notification"
-        Log.i(
-            BackgroundTaskScheduler.LOG_TAG,
-            "FCM received: kind=$kind, dataFields=${message.data.size}, source=$source"
-        )
-    }
-
-    private fun isDebuggable(context: Context): Boolean =
-        (context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
-
-    private fun priorityName(priority: Int): String = when (priority) {
-        RemoteMessage.PRIORITY_HIGH -> "high"
-        RemoteMessage.PRIORITY_NORMAL -> "normal"
-        else -> "unknown"
+    private fun RemoteMessage.deliveryPriority(): FcmDeliveryPriority = when (priority) {
+        RemoteMessage.PRIORITY_HIGH -> FcmDeliveryPriority.HIGH
+        RemoteMessage.PRIORITY_NORMAL -> FcmDeliveryPriority.NORMAL
+        else -> FcmDeliveryPriority.UNKNOWN
     }
 }

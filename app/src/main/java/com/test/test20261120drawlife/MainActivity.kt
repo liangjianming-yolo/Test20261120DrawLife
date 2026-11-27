@@ -38,8 +38,9 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.drawlife.backgroundtoolkit.BackgroundToolkit
-import com.drawlife.backgroundtoolkit.background.AlarmScheduleStatus
-import com.drawlife.backgroundtoolkit.background.DailyAlarmPlan
+import com.drawlife.backgroundtoolkit.background.alarm.AlarmScheduleStatus
+import com.drawlife.backgroundtoolkit.background.alarm.DailyAlarmPlan
+import com.test.test20261120drawlife.background.DemoToolbarNotification
 import com.test.test20261120drawlife.fcm.FcmTestPanel
 import com.test.test20261120drawlife.ui.theme.Test20261120DrawLifeTheme
 import java.time.Instant
@@ -143,11 +144,11 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun readToolbarEntry(intent: Intent) {
-        val entry = BackgroundToolkit.toolbarEntry(intent)
+        val entry = DemoToolbarNotification.entry(intent)
         entryLabel = when (entry) {
-            BackgroundToolkit.ToolbarEntry.TRACKER -> R.string.toolbar_tracker
-            BackgroundToolkit.ToolbarEntry.INFO -> R.string.toolbar_info
-            BackgroundToolkit.ToolbarEntry.SETTINGS -> R.string.toolbar_settings
+            DemoToolbarNotification.Entry.TRACKER -> R.string.toolbar_tracker
+            DemoToolbarNotification.Entry.INFO -> R.string.toolbar_info
+            DemoToolbarNotification.Entry.SETTINGS -> R.string.toolbar_settings
             null -> R.string.test_entry_home
         }
         Log.i(LOG_TAG, "Activity opened, toolbar entry=${entry?.name?.lowercase() ?: "launcher"}")

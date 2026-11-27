@@ -1,7 +1,7 @@
 package com.drawlife.backgroundtoolkit.fcm
 
 import android.util.Log
-import com.drawlife.backgroundtoolkit.background.BackgroundTaskScheduler
+import com.drawlife.backgroundtoolkit.background.work.BackgroundTaskScheduler
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 

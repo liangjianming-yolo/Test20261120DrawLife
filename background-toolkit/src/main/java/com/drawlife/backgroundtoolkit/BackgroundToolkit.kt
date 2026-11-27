@@ -1,39 +1,34 @@
 package com.drawlife.backgroundtoolkit
 
-import android.app.Activity
-import android.app.Application
+import android.app.NotificationManager
 import android.content.Context
-import android.content.Intent
 import android.content.SharedPreferences
-import com.drawlife.backgroundtoolkit.background.AlarmReminderScheduler
-import com.drawlife.backgroundtoolkit.background.AlarmScheduleStatus
-import com.drawlife.backgroundtoolkit.background.BackgroundTaskScheduler
-import com.drawlife.backgroundtoolkit.background.DailyAlarmPlan
 import com.drawlife.backgroundtoolkit.background.DrawLifeForegroundService
 import com.drawlife.backgroundtoolkit.background.ForegroundServiceReceiver
-import com.drawlife.backgroundtoolkit.background.ReminderNotification
-import com.drawlife.backgroundtoolkit.background.ToolbarNotification
-import com.drawlife.backgroundtoolkit.fcm.FcmReminderPolicy
+import com.drawlife.backgroundtoolkit.background.alarm.AlarmReminderScheduler
+import com.drawlife.backgroundtoolkit.background.alarm.AlarmScheduleStatus
+import com.drawlife.backgroundtoolkit.background.alarm.DailyAlarmPlan
+import com.drawlife.backgroundtoolkit.background.work.BackgroundTaskScheduler
+import com.drawlife.backgroundtoolkit.fcm.FcmMessageHandler
 import com.drawlife.backgroundtoolkit.fcm.ToolkitFcm
+import com.drawlife.backgroundtoolkit.heartbeat.HeartbeatConfig
+import com.drawlife.backgroundtoolkit.heartbeat.ProcessHeartbeat
 
 object BackgroundToolkit {
-    /** 点击每日提醒通知后，宿主 Activity 可以从 Intent 读取这条提醒的 key。 */
+    /** 宿主可用这个 extra 在提醒通知的点击 Intent 中传递提醒 key。 */
     const val EXTRA_DAILY_REMINDER_KEY = "com.drawlife.backgroundtoolkit.extra.DAILY_REMINDER_KEY"
 
+    /** 提供相应的宿主实现即可启用该功能。后台组件在进程重建时也会读取这份配置。 */
     data class Config(
-        val launchActivity: Class<out Activity>,
-        val enableForegroundToolbar: Boolean = false,
-        val enableDailyReminder: Boolean = false,
+        val foregroundNotification: ForegroundNotificationProvider? = null,
+        val dailyReminderNotification: DailyReminderNotificationProvider? = null,
+        val fcmMessageHandler: FcmMessageHandler? = null,
         val jobId: Int? = null,
         val enablePeriodicWork: Boolean = false,
         val periodicWorkName: String = "com.drawlife.backgroundtoolkit.periodic",
-        val enableFcmNotifications: Boolean = false,
-        val enableFcmForegroundServiceProbe: Boolean = false,
         val legacyJobServiceName: String? = null,
-        val enableFcmPriorityHandling: Boolean = false
+        val heartbeat: HeartbeatConfig? = null
     )
-
-    enum class ToolbarEntry { TRACKER, INFO, SETTINGS }
 
     @Volatile
     internal var configuration: Config? = null
@@ -41,7 +36,6 @@ object BackgroundToolkit {
 
     @Synchronized
     fun initialize(context: Context, config: Config) {
-        ToolkitFcm.printToken(context)
         check(configuration == null || configuration == config) {
             "BackgroundToolkit was already initialized with a different configuration"
         }
@@ -49,43 +43,32 @@ object BackgroundToolkit {
 
         val appContext = context.applicationContext
         configuration = config
-        val handleFcmPriority = config.enableFcmNotifications && config.enableFcmPriorityHandling
-        if (handleFcmPriority) {
-            (appContext as Application).registerActivityLifecycleCallbacks(FcmReminderPolicy)
+        config.heartbeat?.let { ProcessHeartbeat.start(appContext, it) }
+        if (config.fcmMessageHandler != null && ToolkitFcm.isConfigured(appContext)) {
+            ToolkitFcm.requestRegistrationToken(appContext)
         }
-        if (config.enableFcmNotifications) {
-            ToolkitFcm.createChannel(appContext)
-            if (ToolkitFcm.isConfigured(appContext)) ToolkitFcm.requestRegistrationToken(appContext)
-        }
-        if (config.enableForegroundToolbar) ForegroundServiceReceiver.registerForProcess(appContext)
+        if (config.foregroundNotification != null) ForegroundServiceReceiver.registerForProcess(appContext)
         restoreDailyReminders(appContext, source = "application")
-        // 推送冷启动也会先创建 Application。启用优先级分流时，等页面、广播或高优先级消息请求服务。
-        if (config.enableForegroundToolbar && !handleFcmPriority) {
-            DrawLifeForegroundService.start(appContext, source = "application")
-        }
         if (config.jobId != null) BackgroundTaskScheduler.scheduleJob(appContext)
         if (config.enablePeriodicWork) BackgroundTaskScheduler.schedulePeriodicWork(appContext)
     }
 
     fun refreshToolbar(context: Context, source: String = "activity_resume") {
-        if (configuration?.enableForegroundToolbar == true) {
-            DrawLifeForegroundService.start(context, source = source, refreshNotification = true)
-        }
+        DrawLifeForegroundService.start(context, source = source, refreshNotification = true)
     }
 
-    fun toolbarEntry(intent: Intent): ToolbarEntry? =
-        when (intent.getStringExtra(ToolbarNotification.EXTRA_ENTRY)) {
-            ToolbarNotification.ENTRY_TRACKER -> ToolbarEntry.TRACKER
-            ToolbarNotification.ENTRY_INFO -> ToolbarEntry.INFO
-            ToolbarNotification.ENTRY_SETTINGS -> ToolbarEntry.SETTINGS
-            else -> null
-        }
-
     fun toolbarNotificationsEnabled(context: Context): Boolean =
-        ToolbarNotification.notificationsEnabled(context)
+        notificationsEnabled(context, configuration?.foregroundNotification?.channelId)
 
     fun reminderNotificationsEnabled(context: Context): Boolean =
-        ReminderNotification.notificationsEnabled(context)
+        notificationsEnabled(context, configuration?.dailyReminderNotification?.channelId)
+
+    private fun notificationsEnabled(context: Context, channelId: String?): Boolean {
+        if (channelId == null) return false
+        val manager = requireNotNull(context.getSystemService(NotificationManager::class.java))
+        return manager.areNotificationsEnabled() &&
+            manager.getNotificationChannel(channelId)?.importance != NotificationManager.IMPORTANCE_NONE
+    }
 
     fun canScheduleExactAlarms(context: Context): Boolean =
         AlarmReminderScheduler.canScheduleExactAlarms(context)
@@ -109,7 +92,7 @@ object BackgroundToolkit {
     ): AlarmScheduleStatus {
         require(key == null || key.isNotBlank()) { "Expected a non-blank reminder key" }
         require(hour in 0..23 && minute in 0..59) { "Expected a valid local time" }
-        if (configuration?.enableDailyReminder != true) return AlarmScheduleStatus.DISABLED
+        if (configuration?.dailyReminderNotification == null) return AlarmScheduleStatus.DISABLED
         return AlarmReminderScheduler.setDailyReminder(context, key, hour, minute, title, message)
     }
 
@@ -118,7 +101,7 @@ object BackgroundToolkit {
         restoreDailyReminders(context, source)[null] ?: AlarmScheduleStatus.DISABLED
 
     fun restoreDailyReminders(context: Context, source: String = "activity_resume"): Map<String?, AlarmScheduleStatus> {
-        if (configuration?.enableDailyReminder != true) return emptyMap()
+        if (configuration?.dailyReminderNotification == null) return emptyMap()
         return AlarmReminderScheduler.restore(context, source = source)
     }
 

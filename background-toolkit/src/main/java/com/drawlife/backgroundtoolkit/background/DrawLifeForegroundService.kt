@@ -11,33 +11,28 @@ import android.util.Log
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import com.drawlife.backgroundtoolkit.BackgroundToolkit
+import com.drawlife.backgroundtoolkit.ForegroundNotificationProvider
+import com.drawlife.backgroundtoolkit.background.work.BackgroundTaskScheduler
 import java.util.concurrent.atomic.AtomicBoolean
 
-/** 用前台服务承载通知栏工具栏，服务创建时立即提交通知，后续启动请求可刷新同一张通知。 */
+/** 服务启动时使用宿主提供的通知，后续启动请求可刷新同一张通知。 */
 internal class DrawLifeForegroundService : Service() {
-    override fun onCreate() {
-        super.onCreate()
-        if (BackgroundToolkit.configuration?.enableForegroundToolbar != true) {
-            stopSelf()
-            return
-        }
-        Log.i(BackgroundTaskScheduler.LOG_TAG, "ForegroundService.onCreate pid=${Process.myPid()}")
-        promoteToForeground()
-    }
-
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (!isRunning.get()) return START_NOT_STICKY
-
+        val provider = BackgroundToolkit.configuration?.foregroundNotification
+        if (provider == null) {
+            stopSelf()
+            return START_NOT_STICKY
+        }
         val source = intent?.getStringExtra(EXTRA_START_SOURCE) ?: "system_restart"
         Log.i(
             BackgroundTaskScheduler.LOG_TAG,
             "ForegroundService.onStartCommand startId=$startId, source=$source"
         )
         // 成功后允许系统在进程被回收时重建服务，此时再次进入 onStartCommand 的 intent 可能为 null。
-        return if (promoteToForeground()) START_STICKY else START_NOT_STICKY
+        return if (promoteToForeground(provider)) START_STICKY else START_NOT_STICKY
     }
 
-    private fun promoteToForeground(): Boolean {
+    private fun promoteToForeground(provider: ForegroundNotificationProvider): Boolean {
         return try {
             val serviceType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
@@ -46,14 +41,14 @@ internal class DrawLifeForegroundService : Service() {
             }
             ServiceCompat.startForeground(
                 this,
-                ToolbarNotification.NOTIFICATION_ID,
-                ToolbarNotification.create(this),
+                provider.notificationId,
+                provider.createNotification(this),
                 serviceType
             )
             isRunning.set(true)
             Log.i(
                 BackgroundTaskScheduler.LOG_TAG,
-                "Foreground service active, notification=${ToolbarNotification.NOTIFICATION_ID}, pid=${Process.myPid()}"
+                "Foreground service active, notification=${provider.notificationId}, pid=${Process.myPid()}"
             )
             true
         } catch (exception: Exception) {
@@ -64,7 +59,7 @@ internal class DrawLifeForegroundService : Service() {
         }
     }
 
-    /** 系统通知前台服务运行超时时，移除工具栏通知并结束服务。 */
+    /** 系统通知前台服务运行超时时，移除通知并结束服务。 */
     override fun onTimeout(startId: Int, fgsType: Int) {
         Log.w(BackgroundTaskScheduler.LOG_TAG, "ForegroundService.onTimeout startId=$startId, type=$fgsType")
         isRunning.set(false)
@@ -86,7 +81,7 @@ internal class DrawLifeForegroundService : Service() {
 
         /** source 记录启动来源。服务已经运行时，只有显式请求刷新通知才再次发送启动请求。 */
         fun start(context: Context, source: String, refreshNotification: Boolean = false) {
-            if (BackgroundToolkit.configuration?.enableForegroundToolbar != true) return
+            if (BackgroundToolkit.configuration?.foregroundNotification == null) return
             if (isRunning.get() && !refreshNotification) {
                 Log.i(BackgroundTaskScheduler.LOG_TAG, "Foreground service already active: $source")
                 return
