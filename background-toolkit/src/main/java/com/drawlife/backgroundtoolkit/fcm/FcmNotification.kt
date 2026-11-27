@@ -1,6 +1,7 @@
-package com.test.test20261120drawlife.fcm
+package com.drawlife.backgroundtoolkit.fcm
 
 import android.Manifest
+import android.app.Activity
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -11,9 +12,8 @@ import android.os.Build
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
-import com.test.test20261120drawlife.MainActivity
-import com.test.test20261120drawlife.R
-import com.test.test20261120drawlife.background.BackgroundTaskScheduler
+import com.drawlife.backgroundtoolkit.R
+import com.drawlife.backgroundtoolkit.background.BackgroundTaskScheduler
 
 internal object FcmNotification {
     private const val NOTIFICATION_ID = 34955
@@ -22,37 +22,43 @@ internal object FcmNotification {
         val manager = requireNotNull(context.getSystemService(NotificationManager::class.java))
         manager.createNotificationChannel(
             NotificationChannel(
-                context.getString(R.string.fcm_channel_id),
-                context.getString(R.string.fcm_channel_name),
+                context.getString(R.string.drawlife_toolkit_fcm_channel_id),
+                context.getString(R.string.drawlife_toolkit_fcm_channel_name),
                 NotificationManager.IMPORTANCE_DEFAULT
             )
         )
     }
 
-    fun show(context: Context, messageId: String?, title: String?, body: String?) {
+    fun show(
+        context: Context,
+        launchActivity: Class<out Activity>,
+        messageId: String?,
+        title: String?,
+        body: String?
+    ): Boolean {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
             PackageManager.PERMISSION_GRANTED
         ) {
-            return
+            return false
         }
 
         val manager = requireNotNull(context.getSystemService(NotificationManager::class.java))
-        val channelId = context.getString(R.string.fcm_channel_id)
+        val channelId = context.getString(R.string.drawlife_toolkit_fcm_channel_id)
         if (!manager.areNotificationsEnabled() ||
             manager.getNotificationChannel(channelId)?.importance == NotificationManager.IMPORTANCE_NONE
         ) {
-            return
+            return false
         }
 
-        val intent = Intent(context, MainActivity::class.java).apply {
+        val intent = Intent(context, launchActivity).apply {
             action = "${context.packageName}.open_fcm_notification"
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or
                 Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
         }
         val notification = NotificationCompat.Builder(context, channelId)
-            .setSmallIcon(R.drawable.ic_toolbar_notification)
-            .setContentTitle(title ?: context.getString(R.string.app_name))
+            .setSmallIcon(R.drawable.drawlife_toolkit_ic_notification)
+            .setContentTitle(title ?: context.applicationInfo.loadLabel(context.packageManager))
             .setContentText(body)
             .setContentIntent(PendingIntent.getActivity(
                 context, NOTIFICATION_ID, intent,
@@ -60,10 +66,12 @@ internal object FcmNotification {
             ))
             .setAutoCancel(true)
             .build()
-        try {
+        return try {
             manager.notify(messageId, NOTIFICATION_ID, notification)
+            true
         } catch (exception: SecurityException) {
             Log.w(BackgroundTaskScheduler.LOG_TAG, "FCM notification permission rejected", exception)
+            false
         }
     }
 }

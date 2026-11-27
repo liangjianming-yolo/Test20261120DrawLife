@@ -24,4 +24,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "Test20261120DrawLife"
 include(":app")
- 
+include(":background-toolkit")

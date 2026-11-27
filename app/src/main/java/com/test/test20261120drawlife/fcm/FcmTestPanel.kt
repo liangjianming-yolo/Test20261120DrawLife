@@ -15,8 +15,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.res.stringResource
-import com.google.firebase.FirebaseApp
-import com.google.firebase.messaging.FirebaseMessaging
+import com.drawlife.backgroundtoolkit.fcm.ToolkitFcm
 import com.test.test20261120drawlife.R
 
 @Composable
@@ -25,9 +24,7 @@ internal fun FcmTestPanel() {
     if (activity.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE == 0) return
 
     Text(stringResource(R.string.fcm_title), style = MaterialTheme.typography.titleLarge)
-    val configured = remember(activity) {
-        FirebaseApp.getApps(activity).any { it.name == FirebaseApp.DEFAULT_APP_NAME }
-    }
+    val configured = remember(activity) { ToolkitFcm.isConfigured(activity) }
     if (!configured) {
         Text(stringResource(R.string.fcm_not_configured))
         return
@@ -38,9 +35,8 @@ internal fun FcmTestPanel() {
     }
 }
 
-@Suppress("DEPRECATION") // The Firebase Console test sender accepts an FCM registration token.
 private fun copyConsoleTestToken(activity: Activity) {
-    FirebaseMessaging.getInstance().token.addOnCompleteListener(activity) { result ->
+    ToolkitFcm.requestRegistrationToken(activity).addOnCompleteListener(activity) { result ->
         if (!result.isSuccessful) {
             Toast.makeText(activity, R.string.fcm_token_failed, Toast.LENGTH_SHORT).show()
             return@addOnCompleteListener

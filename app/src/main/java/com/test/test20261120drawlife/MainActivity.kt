@@ -1,11 +1,9 @@
 package com.test.test20261120drawlife
 
 import android.Manifest
-import android.app.NotificationManager
 import android.app.TimePickerDialog
 import android.content.ActivityNotFoundException
 import android.content.Intent
-import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
@@ -17,8 +15,10 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -36,43 +36,38 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
-import com.test.test20261120drawlife.background.AlarmReminderScheduler
-import com.test.test20261120drawlife.background.AlarmScheduleStatus
-import com.test.test20261120drawlife.background.BackgroundTaskScheduler
-import com.test.test20261120drawlife.background.DailyAlarmPlan
-import com.test.test20261120drawlife.background.DrawLifeForegroundService
-import com.test.test20261120drawlife.background.ReminderNotification
-import com.test.test20261120drawlife.background.ToolbarNotification
+import com.drawlife.backgroundtoolkit.BackgroundToolkit
+import com.drawlife.backgroundtoolkit.background.AlarmScheduleStatus
+import com.drawlife.backgroundtoolkit.background.DailyAlarmPlan
 import com.test.test20261120drawlife.fcm.FcmTestPanel
 import com.test.test20261120drawlife.ui.theme.Test20261120DrawLifeTheme
 import java.time.Instant
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 
+private enum class TestReminder(val key: String?, @StringRes val title: Int, @StringRes val message: Int) {
+    WATER("water", R.string.alarm_water_title, R.string.alarm_water_message),
+    HEART_RATE("heart_rate", R.string.alarm_heart_rate_title, R.string.alarm_heart_rate_message),
+    DEFAULT(null, R.string.alarm_notification_title, R.string.alarm_notification_text)
+}
+
 class MainActivity : ComponentActivity() {
     private var entryLabel by mutableIntStateOf(R.string.test_entry_home)
     private var notificationsEnabled by mutableStateOf(false)
     private var reminderNotificationsEnabled by mutableStateOf(false)
     private var exactAlarmAllowed by mutableStateOf(false)
-    private var alarmPlan by mutableStateOf<DailyAlarmPlan?>(null)
-    private var alarmStatus by mutableStateOf(AlarmScheduleStatus.DISABLED)
-    private val alarmPlanListener = SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
-        alarmPlan = AlarmReminderScheduler.readPlan(this)
-    }
+    private var alarmPlans by mutableStateOf(emptyMap<String?, DailyAlarmPlan>())
+    private var alarmStatuses by mutableStateOf(emptyMap<String?, AlarmScheduleStatus>())
+    private var alarmPlanSubscription: AutoCloseable? = null
 
     private val notificationPermission = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
-        Log.i(BackgroundTaskScheduler.LOG_TAG, "POST_NOTIFICATIONS granted=$granted")
+        Log.i(LOG_TAG, "POST_NOTIFICATIONS granted=$granted")
         updateNotificationState()
         if (granted) {
-            DrawLifeForegroundService.start(
-                this,
-                source = "notification_permission",
-                refreshNotification = true
-            )
+            BackgroundToolkit.refreshToolbar(this, source = "notification_permission")
         }
     }
 
@@ -86,20 +81,14 @@ class MainActivity : ComponentActivity() {
                     ForegroundTestScreen(
                         entry = stringResource(entryLabel),
                         notificationsEnabled = notificationsEnabled,
-                        alarmPlan = alarmPlan,
-                        alarmStatus = alarmStatus,
+                        alarmPlans = alarmPlans,
+                        alarmStatuses = alarmStatuses,
                         exactAlarmAllowed = exactAlarmAllowed,
                         reminderNotificationsEnabled = reminderNotificationsEnabled,
                         onSelectAlarmTime = ::showAlarmTimePicker,
+                        onScheduleSameMinute = ::scheduleSameMinute,
                         onAlarmPermissionSettings = ::openAlarmPermissionSettings,
-                        onCancelAlarm = {
-                            alarmStatus = if (AlarmReminderScheduler.cancel(this)) {
-                                AlarmScheduleStatus.DISABLED
-                            } else {
-                                AlarmScheduleStatus.ERROR
-                            }
-                            alarmPlan = AlarmReminderScheduler.readPlan(this)
-                        },
+                        onCancelAlarm = ::cancelReminder,
                         onNotificationSettings = {
                             startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
                                 putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
@@ -125,13 +114,14 @@ class MainActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
-        getSharedPreferences(AlarmReminderScheduler.PREFERENCES_NAME, MODE_PRIVATE)
-            .registerOnSharedPreferenceChangeListener(alarmPlanListener)
+        alarmPlanSubscription = BackgroundToolkit.listenForDailyReminderChanges(this) {
+            alarmPlans = BackgroundToolkit.readDailyReminders(this)
+        }
     }
 
     override fun onStop() {
-        getSharedPreferences(AlarmReminderScheduler.PREFERENCES_NAME, MODE_PRIVATE)
-            .unregisterOnSharedPreferenceChangeListener(alarmPlanListener)
+        alarmPlanSubscription?.close()
+        alarmPlanSubscription = null
         super.onStop()
     }
 
@@ -139,11 +129,11 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         updateNotificationState()
         // 从特殊权限页面返回时重新检查；用户拒绝授权则保留计划。
-        exactAlarmAllowed = AlarmReminderScheduler.canScheduleExactAlarms(this)
-        alarmStatus = AlarmReminderScheduler.restore(this, source = "activity_resume")
-        alarmPlan = AlarmReminderScheduler.readPlan(this)
+        exactAlarmAllowed = BackgroundToolkit.canScheduleExactAlarms(this)
+        alarmStatuses = BackgroundToolkit.restoreDailyReminders(this)
+        alarmPlans = BackgroundToolkit.readDailyReminders(this)
         // 返回应用时补试服务启动，并恢复可能已被用户划掉的工具栏。
-        DrawLifeForegroundService.start(this, source = "activity_resume", refreshNotification = true)
+        BackgroundToolkit.refreshToolbar(this)
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -153,38 +143,54 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun readToolbarEntry(intent: Intent) {
-        val entry = intent.getStringExtra(ToolbarNotification.EXTRA_ENTRY)
+        val entry = BackgroundToolkit.toolbarEntry(intent)
         entryLabel = when (entry) {
-            ToolbarNotification.ENTRY_TRACKER -> R.string.toolbar_tracker
-            ToolbarNotification.ENTRY_INFO -> R.string.toolbar_info
-            ToolbarNotification.ENTRY_SETTINGS -> R.string.toolbar_settings
-            else -> R.string.test_entry_home
+            BackgroundToolkit.ToolbarEntry.TRACKER -> R.string.toolbar_tracker
+            BackgroundToolkit.ToolbarEntry.INFO -> R.string.toolbar_info
+            BackgroundToolkit.ToolbarEntry.SETTINGS -> R.string.toolbar_settings
+            null -> R.string.test_entry_home
         }
-        Log.i(BackgroundTaskScheduler.LOG_TAG, "Activity opened, toolbar entry=${entry ?: "launcher"}")
+        Log.i(LOG_TAG, "Activity opened, toolbar entry=${entry?.name?.lowercase() ?: "launcher"}")
     }
 
     private fun updateNotificationState() {
-        val manager = requireNotNull(getSystemService(NotificationManager::class.java))
-        val channel = manager.getNotificationChannel(ToolbarNotification.CHANNEL_ID)
-        notificationsEnabled = NotificationManagerCompat.from(this).areNotificationsEnabled() &&
-            channel?.importance != NotificationManager.IMPORTANCE_NONE
-        reminderNotificationsEnabled = ReminderNotification.notificationsEnabled(this)
+        notificationsEnabled = BackgroundToolkit.toolbarNotificationsEnabled(this)
+        reminderNotificationsEnabled = BackgroundToolkit.reminderNotificationsEnabled(this)
     }
 
-    private fun showAlarmTimePicker() {
-        val plan = AlarmReminderScheduler.readPlan(this)
+    private fun showAlarmTimePicker(reminder: TestReminder) {
+        val plan = alarmPlans[reminder.key]
         val suggestedTime = ZonedDateTime.now().plusMinutes(2)
         TimePickerDialog(
             this,
-            { _, hour, minute ->
-                alarmStatus = AlarmReminderScheduler.setDailyReminder(this, hour, minute)
-                alarmPlan = AlarmReminderScheduler.readPlan(this)
-                exactAlarmAllowed = AlarmReminderScheduler.canScheduleExactAlarms(this)
-            },
+            { _, hour, minute -> setReminderTime(reminder, hour, minute) },
             plan?.hour ?: suggestedTime.hour,
             plan?.minute ?: suggestedTime.minute,
             true
-        ).show()
+        ).apply { setTitle(reminder.title) }.show()
+    }
+
+    private fun scheduleSameMinute() {
+        val time = ZonedDateTime.now().plusMinutes(2)
+        setReminderTime(TestReminder.WATER, time.hour, time.minute)
+        setReminderTime(TestReminder.HEART_RATE, time.hour, time.minute)
+    }
+
+    private fun setReminderTime(reminder: TestReminder, hour: Int, minute: Int) {
+        val status = BackgroundToolkit.setDailyReminder(
+            this, reminder.key, hour, minute, getString(reminder.title), getString(reminder.message)
+        )
+        alarmStatuses = alarmStatuses + (reminder.key to status)
+        exactAlarmAllowed = BackgroundToolkit.canScheduleExactAlarms(this)
+    }
+
+    private fun cancelReminder(reminder: TestReminder) {
+        val status = if (BackgroundToolkit.cancelDailyReminder(this, reminder.key)) {
+            AlarmScheduleStatus.DISABLED
+        } else {
+            AlarmScheduleStatus.ERROR
+        }
+        alarmStatuses = alarmStatuses + (reminder.key to status)
     }
 
     private fun openAlarmPermissionSettings() {
@@ -204,13 +210,14 @@ class MainActivity : ComponentActivity() {
 private fun ForegroundTestScreen(
     entry: String,
     notificationsEnabled: Boolean,
-    alarmPlan: DailyAlarmPlan?,
-    alarmStatus: AlarmScheduleStatus,
+    alarmPlans: Map<String?, DailyAlarmPlan>,
+    alarmStatuses: Map<String?, AlarmScheduleStatus>,
     exactAlarmAllowed: Boolean,
     reminderNotificationsEnabled: Boolean,
-    onSelectAlarmTime: () -> Unit,
+    onSelectAlarmTime: (TestReminder) -> Unit,
+    onScheduleSameMinute: () -> Unit,
     onAlarmPermissionSettings: () -> Unit,
-    onCancelAlarm: () -> Unit,
+    onCancelAlarm: (TestReminder) -> Unit,
     onNotificationSettings: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -230,38 +237,59 @@ private fun ForegroundTestScreen(
 
         Text(stringResource(R.string.alarm_title), style = MaterialTheme.typography.titleLarge)
         Text(stringResource(R.string.alarm_instructions))
-        if (alarmPlan != null) {
-            val nextTime = Instant.ofEpochMilli(alarmPlan.nextTriggerAtMillis)
-                .atZone(java.time.ZoneId.systemDefault())
-                .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))
-            Text(stringResource(
-                R.string.alarm_plan_format, alarmPlan.hour, alarmPlan.minute, nextTime
-            ))
-        }
-        Text(stringResource(when (alarmStatus) {
-            AlarmScheduleStatus.DISABLED -> R.string.alarm_disabled
-            AlarmScheduleStatus.SCHEDULED -> R.string.alarm_scheduled
-            AlarmScheduleStatus.NEEDS_PERMISSION -> R.string.alarm_permission_needed
-            AlarmScheduleStatus.ERROR -> R.string.alarm_error
-        }))
         if (!reminderNotificationsEnabled) {
             Text(stringResource(R.string.alarm_notifications_disabled))
-        }
-        TextButton(onClick = onSelectAlarmTime) {
-            Text(stringResource(R.string.alarm_select_time))
         }
         if (!exactAlarmAllowed) {
             TextButton(onClick = onAlarmPermissionSettings) {
                 Text(stringResource(R.string.alarm_permission_settings))
             }
         }
-        if (alarmPlan != null) {
-            TextButton(onClick = onCancelAlarm) {
-                Text(stringResource(R.string.alarm_cancel))
-            }
+        TextButton(onClick = onScheduleSameMinute) {
+            Text(stringResource(R.string.alarm_schedule_same_minute))
+        }
+        for (reminder in TestReminder.entries) {
+            AlarmTestItem(
+                reminder = reminder,
+                plan = alarmPlans[reminder.key],
+                status = alarmStatuses[reminder.key] ?: AlarmScheduleStatus.DISABLED,
+                onSelectTime = { onSelectAlarmTime(reminder) },
+                onCancel = { onCancelAlarm(reminder) }
+            )
         }
 
         FcmTestPanel()
+    }
+}
+
+@Composable
+private fun AlarmTestItem(
+    reminder: TestReminder,
+    plan: DailyAlarmPlan?,
+    status: AlarmScheduleStatus,
+    onSelectTime: () -> Unit,
+    onCancel: () -> Unit
+) {
+    Column {
+        Text(stringResource(reminder.title), style = MaterialTheme.typography.titleMedium)
+        if (plan != null) {
+            val nextTime = Instant.ofEpochMilli(plan.nextTriggerAtMillis)
+                .atZone(java.time.ZoneId.systemDefault())
+                .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))
+            Text(stringResource(R.string.alarm_plan_format, plan.hour, plan.minute, nextTime))
+        }
+        Text(stringResource(when (status) {
+            AlarmScheduleStatus.DISABLED -> R.string.alarm_disabled
+            AlarmScheduleStatus.SCHEDULED -> R.string.alarm_scheduled
+            AlarmScheduleStatus.NEEDS_PERMISSION -> R.string.alarm_permission_needed
+            AlarmScheduleStatus.ERROR -> R.string.alarm_error
+        }))
+        Row {
+            TextButton(onClick = onSelectTime) { Text(stringResource(R.string.alarm_select_time)) }
+            if (plan != null) {
+                TextButton(onClick = onCancel) { Text(stringResource(R.string.alarm_cancel)) }
+            }
+        }
     }
 }
 
@@ -272,11 +300,12 @@ private fun ForegroundTestPreview() {
         ForegroundTestScreen(
             entry = stringResource(R.string.test_entry_home),
             notificationsEnabled = true,
-            alarmPlan = null,
-            alarmStatus = AlarmScheduleStatus.DISABLED,
+            alarmPlans = emptyMap(),
+            alarmStatuses = emptyMap(),
             exactAlarmAllowed = true,
             reminderNotificationsEnabled = true,
             onSelectAlarmTime = {},
+            onScheduleSameMinute = {},
             onAlarmPermissionSettings = {},
             onCancelAlarm = {},
             onNotificationSettings = {}

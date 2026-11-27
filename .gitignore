@@ -2,6 +2,8 @@
 .gradle
 /local.properties
 /app/google-services.json
+serviceAccountKey.json
+*-firebase-adminsdk-*.json
 /.idea/caches
 /.idea/libraries
 /.idea/modules.xml

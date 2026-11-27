@@ -1,4 +1,4 @@
-package com.test.test20261120drawlife.background
+package com.drawlife.backgroundtoolkit.background
 
 import android.app.Service
 import android.content.Context
@@ -10,11 +10,17 @@ import android.os.Process
 import android.util.Log
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
+import com.drawlife.backgroundtoolkit.BackgroundToolkit
 import java.util.concurrent.atomic.AtomicBoolean
 
-class DrawLifeForegroundService : Service() {
+/** 用前台服务承载通知栏工具栏，服务创建时立即提交通知，后续启动请求可刷新同一张通知。 */
+internal class DrawLifeForegroundService : Service() {
     override fun onCreate() {
         super.onCreate()
+        if (BackgroundToolkit.configuration?.enableForegroundToolbar != true) {
+            stopSelf()
+            return
+        }
         Log.i(BackgroundTaskScheduler.LOG_TAG, "ForegroundService.onCreate pid=${Process.myPid()}")
         promoteToForeground()
     }
@@ -27,6 +33,7 @@ class DrawLifeForegroundService : Service() {
             BackgroundTaskScheduler.LOG_TAG,
             "ForegroundService.onStartCommand startId=$startId, source=$source"
         )
+        // 成功后允许系统在进程被回收时重建服务，此时再次进入 onStartCommand 的 intent 可能为 null。
         return if (promoteToForeground()) START_STICKY else START_NOT_STICKY
     }
 
@@ -40,7 +47,7 @@ class DrawLifeForegroundService : Service() {
             ServiceCompat.startForeground(
                 this,
                 ToolbarNotification.NOTIFICATION_ID,
-                ToolbarNotification.create(this, forForegroundService = true),
+                ToolbarNotification.create(this),
                 serviceType
             )
             isRunning.set(true)
@@ -57,6 +64,7 @@ class DrawLifeForegroundService : Service() {
         }
     }
 
+    /** 系统通知前台服务运行超时时，移除工具栏通知并结束服务。 */
     override fun onTimeout(startId: Int, fgsType: Int) {
         Log.w(BackgroundTaskScheduler.LOG_TAG, "ForegroundService.onTimeout startId=$startId, type=$fgsType")
         isRunning.set(false)
@@ -75,9 +83,10 @@ class DrawLifeForegroundService : Service() {
     companion object {
         private const val EXTRA_START_SOURCE = "foreground_start_source"
         private val isRunning = AtomicBoolean(false)
-        val isActive: Boolean get() = isRunning.get()
 
+        /** source 记录启动来源。服务已经运行时，只有显式请求刷新通知才再次发送启动请求。 */
         fun start(context: Context, source: String, refreshNotification: Boolean = false) {
+            if (BackgroundToolkit.configuration?.enableForegroundToolbar != true) return
             if (isRunning.get() && !refreshNotification) {
                 Log.i(BackgroundTaskScheduler.LOG_TAG, "Foreground service already active: $source")
                 return

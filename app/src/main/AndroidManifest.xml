@@ -2,13 +2,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
-    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
-    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
-
     <application
         android:name=".DrawLifeApplication"
         android:allowBackup="true"
@@ -19,43 +12,8 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.Test20261120DrawLife">
-        <!-- 其余受隐式广播限制的监听由 Application 动态注册。 -->
-        <receiver
-            android:name=".background.ForegroundServiceReceiver"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="android.intent.action.BOOT_COMPLETED" />
-            </intent-filter>
-            <intent-filter>
-                <action android:name="android.intent.action.MEDIA_EJECT" />
-                <action android:name="android.intent.action.MEDIA_MOUNTED" />
-                <data android:scheme="file" />
-            </intent-filter>
-        </receiver>
-
-        <receiver
-            android:name=".background.AlarmReminderReceiver"
-            android:exported="false" />
-
-        <receiver
-            android:name=".background.AlarmRestoreReceiver"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="android.intent.action.BOOT_COMPLETED" />
-                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
-                <action android:name="android.intent.action.TIME_SET" />
-                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
-                <action android:name="android.app.action.SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED" />
-            </intent-filter>
-        </receiver>
-
         <service
-            android:name=".background.DrawLifeForegroundService"
-            android:exported="false"
-            android:foregroundServiceType="dataSync" />
-
-        <service
-            android:name=".fcm.DrawLifeMessagingService"
+            android:name="com.drawlife.backgroundtoolkit.fcm.DrawLifeMessagingService"
             android:exported="false">
             <intent-filter>
                 <action android:name="com.google.firebase.MESSAGING_EVENT" />
@@ -64,15 +22,10 @@
 
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_icon"
-            android:resource="@drawable/ic_toolbar_notification" />
+            android:resource="@drawable/drawlife_toolkit_ic_notification" />
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_channel_id"
-            android:value="@string/fcm_channel_id" />
-
-        <service
-            android:name=".background.DrawLifeJobService"
-            android:exported="true"
-            android:permission="android.permission.BIND_JOB_SERVICE" />
+            android:value="@string/drawlife_toolkit_fcm_channel_id" />
 
         <!-- 使用 Application 提供的 WorkManager 配置，保留 100 号 Job 的编号。 -->
         <provider

@@ -1,0 +1,12 @@
+<resources>
+    <string name="drawlife_toolkit_fcm_channel_id" translatable="false">draw_life_fcm</string>
+    <string name="drawlife_toolkit_fcm_channel_name">FCM 推送</string>
+    <string name="drawlife_toolkit_fcm_foreground_probe_title">FCM 前台服务测试</string>
+    <string name="drawlife_toolkit_fcm_foreground_probe_body">测试设备已收到一条 FCM 数据消息。</string>
+    <string name="drawlife_toolkit_fcm_water_title">喝水提醒</string>
+    <string name="drawlife_toolkit_fcm_water_body">休息一下，喝杯水吧。</string>
+    <string name="drawlife_toolkit_fcm_heart_rate_title">心率提醒</string>
+    <string name="drawlife_toolkit_fcm_heart_rate_body">点此查看每天的心率提醒时间。</string>
+    <string name="drawlife_toolkit_fcm_daily_title">每日提醒</string>
+    <string name="drawlife_toolkit_fcm_daily_body">点此查看喝水和心率提醒的时间安排。</string>
+</resources>

@@ -1,20 +1,10 @@
 package com.test.test20261120drawlife.background
 
 import android.content.Context
-import android.os.Process
-import android.util.Log
-import androidx.work.Worker
+import androidx.annotation.Keep
 import androidx.work.WorkerParameters
 
-class DrawLifeWorker(
-    context: Context,
-    workerParameters: WorkerParameters
-) : Worker(context, workerParameters) {
-    override fun doWork(): Result {
-        Log.i(
-            BackgroundTaskScheduler.LOG_TAG,
-            "Worker.doWork id=$id, attempt=$runAttemptCount, pid=${Process.myPid()}"
-        )
-        return Result.success()
-    }
-}
+/** 旧版 App 创建的周期任务保存了这个类的完整名称。用 @Keep 保留入口，让旧任务也执行库中的实现。 */
+@Keep
+class DrawLifeWorker(context: Context, parameters: WorkerParameters) :
+    com.drawlife.backgroundtoolkit.background.DrawLifeWorker(context, parameters)

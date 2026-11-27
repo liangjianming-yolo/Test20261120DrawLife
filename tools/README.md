@@ -2,7 +2,9 @@
 
 发送器通过 [FCM HTTP v1](https://firebase.google.com/docs/cloud-messaging/send/v1-api) 模拟服务端。它从 `app/google-services.json` 读取 Firebase 项目 ID，每次只向一个 DrawLife Android 应用实例发送。
 
-首次使用时，请用在目标项目中拥有 `cloudmessaging.messages.create` 权限的 Google 账号执行 `gcloud auth application-default login`。已有短期 OAuth Access Token 时，也可以通过环境变量 `FCM_ACCESS_TOKEN` 提供。令牌需包含 `firebase.messaging` 或 `cloud-platform` [授权范围](https://firebase.google.com/docs/reference/fcm/rest/v1/projects.messages/send#authorization-scopes)。
+当前项目为 `scanbuddy-2661`。使用 `python3 -m pip install -r tools/requirements.txt` 安装发送器依赖。脚本默认从 `~/.config/drawlife-fcm/scanbuddy-2661/serviceAccountKey.json` 读取服务账号密钥，向 Google 换取具有 `firebase.messaging` 范围的短期令牌。服务账号需要目标项目的 `cloudmessaging.messages.create` 权限。
+
+可以用 `GOOGLE_APPLICATION_CREDENTIALS` 指定同一项目的其他密钥路径。显式指定的密钥优先；没有配置密钥时，发送器依次使用 `FCM_ACCESS_TOKEN` 和 gcloud 应用默认凭据。设备注册 Token 在发送时从 Debug 版首页复制。
 
 ```sh
 python3 tools/send_fcm_test.py notification --title "DrawLife 测试" --body "验证通知到达"
@@ -10,22 +12,24 @@ python3 tools/send_fcm_test.py data --value "data-only-test"
 python3 tools/send_fcm_test.py --validate-only notification
 ```
 
-出现提示后，粘贴调试版首页里「复制 FCM 测试 Token」取得的设备注册 Token。脚本也支持从标准输入读取一行 Token。`--validate-only` 需要服务端授权，只让 FCM 校验请求，不投递消息。
+打开包含当前 Firebase 配置的 Debug 版后，App 会把设备注册 Token 存入应用私有的 `no_backup/drawlife-fcm-registration.json`。Firebase 刷新 Token 时会更新该文件。运行 `python3 tools/send_fcm_test.py sync-token` 可将默认模拟器的当前 Token 同步到 Mac 上的 `~/.config/drawlife-fcm/scanbuddy-2661/registration-token-emulator-5554.json`。使用其他设备时，在子命令前加 `--serial 设备序列号`。
+
+发送前脚本会尝试从所选设备同步，设备离线时使用该设备上次同步的 Token。也可通过标准输入显式提供一行 Token；交互模式没有可用缓存时可粘贴首页复制的 Token。`--validate-only` 只让 FCM 校验请求。
 
 两个发送命令都默认使用 `normal`。给测试设备单独验证高优先级时，可以用 `notification --priority high` 或 `data --priority high`。应用正式使用时，`high` 适用于需要及时显示的用户可见通知。FCM 可能降低长期不产生可见通知的消息优先级，因此请求优先级与实际送达优先级可能不同。[Firebase 优先级说明](https://firebase.google.com/docs/cloud-messaging/android-message-priority#deprioritization_of_high_priority_fcm_on_android)
 
-通知消息在目标模拟器的通知栏中核对。普通纯数据消息只记录接收事件，可运行 `adb -s emulator-5554 logcat -d -s DrawLife:I` 查找 `FCM received: kind=data`。
+通知消息在目标模拟器的通知栏中核对。示例 App 收到纯数据消息时，会根据实际投递优先级处理。可在 Logcat 的 `DrawLife` 标签下查找 `FCM priority`。
 
-## 验证真实高优先级 data 是否能启动前台服务
+## 对照真实 FCM 消息的两种优先级
 
-先运行下面的本地脚本，确认应用在后台且服务未运行。再发一条带测试标记的真实消息：
+将 App 切到后台，保持手机亮屏、解锁、竖屏并允许 FCM 通知。分别发送两条纯数据消息。
 
 ```sh
-python3 tools/simulate_fcm_data.py --serial emulator-5554 --cold-start
-python3 tools/send_fcm_test.py data --priority high --value fgs-high-priority-test
+python3 tools/send_fcm_test.py data --priority normal
+python3 tools/send_fcm_test.py data --priority high
 ```
 
-此测试只在 Debug APK 的真实 FCM 回调中启用。日志中的 `FCM priority` 记录请求和实际送达优先级。若实际为 `high`，查找 `source=fcm_high_priority_test`，再用 `adb -s emulator-5554 shell dumpsys activity services com.test.test20261120drawlife` 确认 `isForeground=true`。
+日志中 `received=normal` 或 `unknown` 会进入普通提醒检查。安装满 5 分钟、距上次普通提醒至少 43 分钟且当日未满 3 条时，可以收到「每日提醒」。`received=high` 会尝试发布一条本地提醒，并请求工具栏服务，日志中的启动来源为 `fcm_high_priority`。若服务本来就在运行，日志会记录 `already active`。用 `adb -s emulator-5554 shell dumpsys activity services com.test.test20261120drawlife` 查看服务状态。进入真实回调就会分流，无需特定的 `test_value`。本地模拟广播只验证本地接收入口。
 
 ## 本地模拟纯数据冷启动
 

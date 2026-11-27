@@ -41,14 +41,12 @@ android {
 }
 
 dependencies {
-    implementation(platform(libs.firebase.bom))
-    implementation(libs.firebase.messaging)
+    implementation(project(":background-toolkit"))
     constraints {
         implementation(libs.androidx.fragment) {
             because("Play services brings in Fragment 1.1.0, which predates the Activity Result permission API")
         }
     }
-    implementation(libs.androidx.work.runtime)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.compose.material3)

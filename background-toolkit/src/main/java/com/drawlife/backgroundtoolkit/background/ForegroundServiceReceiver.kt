@@ -1,4 +1,4 @@
-package com.test.test20261120drawlife.background
+package com.drawlife.backgroundtoolkit.background
 
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -8,10 +8,14 @@ import android.net.wifi.WifiManager
 import android.os.Build
 import android.util.Log
 import androidx.core.content.ContextCompat
+import com.drawlife.backgroundtoolkit.BackgroundToolkit
 
+/** 工具栏功能开启时，收到支持的系统广播后尝试启动尚未运行的前台服务。 */
 class ForegroundServiceReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
+        if (BackgroundToolkit.configuration?.enableForegroundToolbar != true) return
         val action = intent.action ?: return
+        // 应用安装、替换和移除广播应携带 package: URI，存储介质广播应携带 file: URI。
         when (action) {
             Intent.ACTION_BOOT_COMPLETED -> Unit
             in stateActions -> Unit
@@ -21,20 +25,16 @@ class ForegroundServiceReceiver : BroadcastReceiver() {
         }
 
         Log.i(BackgroundTaskScheduler.LOG_TAG, "Foreground trigger received: $action")
+        // Android 15 起，当前应用不能从开机广播启动 dataSync 前台服务。
         if (action == Intent.ACTION_BOOT_COMPLETED &&
             Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM
-        ) {
-            // Android 15 起禁止在开机广播中启动 dataSync 前台服务。
-            if (!DrawLifeForegroundService.isActive) {
-                ToolbarNotification.restoreAfterBoot(context)
-            }
-            return
-        }
-        // 复用运行状态检查和异常处理。收到广播不代表系统允许启动前台服务。
+        ) return
+        // start 会先检查服务运行标记，已运行就直接返回。
         DrawLifeForegroundService.start(context, source = "broadcast:$action")
     }
 
     companion object {
+        // 动态监听用户解锁、电源连接或断开，以及 Wi-Fi 开关和连接状态变化。
         private val stateActions = listOf(
             Intent.ACTION_USER_PRESENT,
             Intent.ACTION_POWER_CONNECTED,
@@ -47,6 +47,7 @@ class ForegroundServiceReceiver : BroadcastReceiver() {
             Intent.ACTION_PACKAGE_REPLACED,
             Intent.ACTION_PACKAGE_REMOVED
         )
+        // 清单监听存储介质弹出、挂载，同时单独声明开机完成广播。
         private val mediaActions = listOf(Intent.ACTION_MEDIA_EJECT, Intent.ACTION_MEDIA_MOUNTED)
         private val processReceiver = ForegroundServiceReceiver()
         private val registeredGroups = mutableSetOf<String>()
@@ -72,6 +73,7 @@ class ForegroundServiceReceiver : BroadcastReceiver() {
                     ContextCompat.registerReceiver(
                         appContext, processReceiver, filter, ContextCompat.RECEIVER_EXPORTED
                     )
+                    // 仅记录注册成功的组，后续调用可以单独重试失败的组。
                     registeredGroups.add(group)
                     Log.i(BackgroundTaskScheduler.LOG_TAG, "Foreground broadcasts registered: $group")
                 } catch (exception: RuntimeException) {
